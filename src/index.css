@@ -1,0 +1,53 @@
+:root {
+  --noite: #160e24;
+  --noite-funda: #0d0817;
+  --tapete: #b3122e;
+  --ouro: #e9b949;
+  --ouro-escuro: #7a5a17;
+  --lampada: #fff3d1;
+  --prata: #d9d4c7;
+  --lampada-suave: rgba(255, 243, 209, 0.7);
+
+  font-family: Jost, 'Futura', 'Avenir Next', sans-serif;
+  line-height: 1.5;
+  color: var(--lampada);
+  background: var(--noite-funda);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100vh;
+  margin: 0;
+}
+
+body {
+  background: var(--noite-funda);
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+a {
+  color: inherit;
+}
+
+img {
+  max-width: 100%;
+}
+
+:focus-visible {
+  outline: 3px solid var(--ouro);
+  outline-offset: 3px;
+}

@@ -1,0 +1,6 @@
+Options -Indexes
+
+# config.php guarda o token: nunca deve ser aberto pelo navegador.
+<Files "config.php">
+  Require all denied
+</Files>

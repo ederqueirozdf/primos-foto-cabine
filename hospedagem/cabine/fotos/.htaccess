@@ -1,0 +1,6 @@
+Options -Indexes
+
+# Esta pasta só guarda imagens. Bloqueia qualquer script que apareça aqui.
+<FilesMatch "\.(php\d?|phtml|phar|pl|py|cgi|sh|html?)$">
+  Require all denied
+</FilesMatch>
