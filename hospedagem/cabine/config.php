@@ -2,7 +2,7 @@
 // Configuração do álbum online da cabine.
 // O token precisa ser IGUAL ao CABINE_UPLOAD_TOKEN do arquivo .env da cabine.
 
-const CABINE_TOKEN = '8bee83b8eedb4fce13e1b68e5c3003b9a3ad72b91db667bd';
+const CABINE_TOKEN = 'TOKENAQUI';
 
 // Endereço público desta pasta, sem barra no final.
 const CABINE_BASE_URL = 'https://festadosprimos.com/cabine';

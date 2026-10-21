@@ -257,16 +257,15 @@ app.delete('/api/frames/:id', requireAdmin, (req, res) => {
 
 // Responde em NDJSON (uma linha JSON por evento) para a cabine mostrar o progresso:
 // {"type":"progress","percent":40} ... {"type":"done","shareUrl":"...","mode":"online"}
-app.post('/api/upload', async (req, res) => {
-  const { image, eventName } = req.body || {}
-
+// Salva a foto (data URL) em server/uploads. Devolve { error } com status HTTP se não der.
+function saveLocalPhoto({ image, eventName }) {
   if (!image || typeof image !== 'string' || !image.startsWith('data:image')) {
-    return res.status(400).json({ message: 'Imagem inválida para upload.' })
+    return { error: { status: 400, message: 'Imagem inválida para upload.' } }
   }
 
   const match = image.match(/^data:image\/(png|jpeg|jpg);base64,(.+)$/)
   if (!match) {
-    return res.status(400).json({ message: 'Formato da imagem não suportado.' })
+    return { error: { status: 400, message: 'Formato da imagem não suportado.' } }
   }
 
   const [, format, base64Data] = match
@@ -275,20 +274,40 @@ app.post('/api/upload', async (req, res) => {
   const fileName = `${Date.now()}-${safeName}.${extension}`
   const binary = Buffer.from(base64Data, 'base64')
 
-  // Sempre guarda uma cópia na cabine, inclusive no modo online.
   try {
     fs.writeFileSync(path.join(uploadsDir, fileName), binary)
   } catch {
-    return res.status(500).json({ message: 'Erro ao salvar a imagem na cabine.' })
+    return { error: { status: 500, message: 'Erro ao salvar a imagem na cabine.' } }
   }
 
-  const localUrl = `${publicBaseUrl}/uploads/${fileName}`
+  return { fileName, binary, extension, localUrl: `${publicBaseUrl}/uploads/${fileName}` }
+}
+
+// Só salva na cabine, sem publicar (ex.: "Próxima foto" sem ter publicado).
+app.post('/api/save-local', (req, res) => {
+  const saved = saveLocalPhoto(req.body || {})
+  if (saved.error) {
+    return res.status(saved.error.status).json({ message: saved.error.message })
+  }
+  return res.json({ ok: true, fileName: saved.fileName, url: saved.localUrl })
+})
+
+app.post('/api/upload', async (req, res) => {
+  // Sempre guarda uma cópia na cabine, inclusive no modo online.
+  const saved = saveLocalPhoto(req.body || {})
+  if (saved.error) {
+    return res.status(saved.error.status).json({ message: saved.error.message })
+  }
+
+  const { fileName, binary, localUrl } = saved
+  const mode = readSettings().publishMode === 'online' ? 'online' : 'offline'
   const send = (event) => res.write(`${JSON.stringify(event)}\n`)
 
   res.status(200).set({ 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-store' })
   res.flushHeaders()
+  send({ type: 'start', mode })
 
-  if (readSettings().publishMode !== 'online') {
+  if (mode !== 'online') {
     send({ type: 'progress', percent: 100 })
     send({ type: 'done', mode: 'offline', fileName, shareUrl: localUrl })
     return res.end()

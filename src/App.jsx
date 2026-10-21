@@ -22,10 +22,15 @@ function App() {
   const [cameraError, setCameraError] = useState('')
   const [isUploading, setIsUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
+  const [uploadMode, setUploadMode] = useState(null)
+  const [isSaved, setIsSaved] = useState(false)
+  // Muda a cada nova sessão; resultados de um envio antigo não aparecem na tela do grupo seguinte.
+  const sessionRef = useRef(0)
   const [shot, setShot] = useState(1)
   const firstImageRef = useRef('')
   const [flashCount, setFlashCount] = useState(0)
   const isCameraActive = step === 'camera' || step === 'countdown'
+  const isPublishingOnline = isUploading && uploadMode === 'online'
 
   useEffect(() => {
     if (step !== 'theme') {
@@ -167,6 +172,10 @@ function App() {
   }
 
   const resetSession = () => {
+    sessionRef.current += 1
+    setIsSaved(false)
+    setIsUploading(false)
+    setUploadMode(null)
     setStep('intro')
     setFinalImage('')
     setShareUrl('')
@@ -181,8 +190,12 @@ function App() {
       return
     }
 
+    const session = sessionRef.current
+    const isCurrent = () => sessionRef.current === session
+
     setIsUploading(true)
     setUploadProgress(0)
+    setUploadMode(null)
     setStatus('')
 
     try {
@@ -202,6 +215,11 @@ function App() {
         throw new Error(data.message || 'A cabine não conseguiu receber a foto.')
       }
 
+      // A resposta só começa depois que a cópia local foi gravada.
+      if (isCurrent()) {
+        setIsSaved(true)
+      }
+
       // O servidor manda uma linha JSON por evento: progresso, conclusão ou erro.
       const reader = response.body.getReader()
       const decoder = new TextDecoder()
@@ -216,7 +234,12 @@ function App() {
 
         for (const line of lines.filter(Boolean)) {
           const event = JSON.parse(line)
-          if (event.type === 'progress') {
+          if (!isCurrent()) {
+            continue
+          }
+          if (event.type === 'start') {
+            setUploadMode(event.mode)
+          } else if (event.type === 'progress') {
             setUploadProgress(event.percent)
           } else if (event.type === 'error') {
             throw new Error(event.message)
@@ -228,6 +251,10 @@ function App() {
         if (done && !result) {
           throw new Error('A conexão caiu antes de terminar. A foto ficou salva na cabine.')
         }
+      }
+
+      if (!isCurrent()) {
+        return
       }
 
       setUploadProgress(100)
@@ -243,9 +270,28 @@ function App() {
         setStatus('Salva no álbum da cabine.')
       }
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : 'Não deu para publicar a foto agora.')
+      if (isCurrent()) {
+        setStatus(error instanceof Error ? error.message : 'Não deu para publicar a foto agora.')
+      }
     } finally {
-      setIsUploading(false)
+      if (isCurrent()) {
+        setIsUploading(false)
+      }
+    }
+  }
+
+  const saveLocally = async (image) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/save-local`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image, eventName: 'festa-dos-primos' }),
+      })
+      if (!response.ok) {
+        throw new Error()
+      }
+    } catch {
+      setStatus('A foto anterior não foi salva na cabine. Confira se o servidor da cabine está rodando.')
     }
   }
 
@@ -260,11 +306,23 @@ function App() {
     link.click()
   }
 
-  const handleRetake = () => {
+  // Mesma moldura, nova sessão: volta para a câmera e já inicia a contagem.
+  // "Próxima foto" (outro grupo) guarda a foto atual na cabine se ela ainda não foi salva;
+  // "Refazer" (mesmo grupo) descarta.
+  const startNextShot = ({ keepCurrent }) => {
+    if (keepCurrent && finalImage && !isSaved && !isUploading) {
+      void saveLocally(finalImage)
+    }
+
+    sessionRef.current += 1
+    setIsSaved(false)
+    setIsUploading(false)
+    setUploadMode(null)
     setFinalImage('')
     setShareUrl('')
     setQrCode('')
     setIsQrOpen(false)
+    setUploadProgress(0)
     startCountdown()
   }
 
@@ -401,7 +459,15 @@ function App() {
             <button type="button" className="button" onClick={handleUpload} disabled={isUploading}>
               {isUploading ? 'Publicando…' : 'Publicar no álbum'}
             </button>
-            <button type="button" className="text-button" onClick={handleRetake}>
+            <button
+              type="button"
+              className="button button-next"
+              onClick={() => startNextShot({ keepCurrent: true })}
+              disabled={isPublishingOnline}
+            >
+              Próxima foto
+            </button>
+            <button type="button" className="text-button" onClick={() => startNextShot({ keepCurrent: false })} disabled={isPublishingOnline}>
               Refazer
             </button>
           </div>
@@ -452,9 +518,14 @@ function App() {
                 <p>Aponte a câmera do celular para o código e baixe a sua foto.</p>
                 <img src={qrCode} alt={`QR code com o link da foto: ${shareUrl}`} className="qr-image" />
                 <p className="qr-url">{shareUrl.replace(/^https?:\/\//, '')}</p>
-                <button type="button" className="button button-gold" onClick={() => setIsQrOpen(false)} autoFocus>
-                  Fechar
-                </button>
+                <div className="qr-actions">
+                  <button type="button" className="button" onClick={() => setIsQrOpen(false)}>
+                    Fechar
+                  </button>
+                  <button type="button" className="button button-gold" onClick={() => startNextShot({ keepCurrent: true })} autoFocus>
+                    Próxima foto
+                  </button>
+                </div>
               </div>
             </div>
           )}
